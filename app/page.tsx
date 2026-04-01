@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { IngredientForm } from "@/components/IngredientForm";
 import { RecipeCard } from "@/components/RecipeCard";
 import type { RecipeSuggestion, SuggestResponseBody } from "@/types/recipe";
@@ -54,6 +54,7 @@ export default function Home() {
   const [ingredientInput, setIngredientInput] = useState("");
   const [results, setResults] = useState<RecipeSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [validationMessage, setValidationMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [onlyTwoMissing, setOnlyTwoMissing] = useState(false);
@@ -69,7 +70,7 @@ export default function Home() {
 
   const bestMatchId = filteredResults.length > 0 ? filteredResults[0].id : null;
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationMessage("");
     setErrorMessage("");
@@ -83,6 +84,7 @@ export default function Home() {
     }
 
     setIsLoading(true);
+    setHasSearched(true);
 
     try {
       const response = await fetch("/api/suggest", {
@@ -107,9 +109,9 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [ingredientInput]);
 
-  function toggleFavorite(recipeId: string) {
+  const toggleFavorite = useCallback((recipeId: string) => {
     const isAlreadyFavorite = favoriteRecipeIds.includes(recipeId);
 
     const updated = isAlreadyFavorite
@@ -118,7 +120,10 @@ export default function Home() {
 
     setFavoriteRecipeIds(updated);
     window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
-  }
+  }, [favoriteRecipeIds]);
+
+  const showNoRecipesMessage =
+    !isLoading && !errorMessage && hasSearched && results.length === 0;
 
   return (
     <main className="relative flex-1 overflow-hidden px-4 py-10 sm:px-6 lg:px-8">
@@ -170,6 +175,12 @@ export default function Home() {
         {!isLoading && !errorMessage && results.length > 0 && filteredResults.length === 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-700">
             No recipes match your filter. Try disabling the missing-ingredient filter.
+          </div>
+        ) : null}
+
+        {showNoRecipesMessage ? (
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-4 text-sm font-medium text-slate-700">
+            No recipes found for the provided ingredients.
           </div>
         ) : null}
       </section>

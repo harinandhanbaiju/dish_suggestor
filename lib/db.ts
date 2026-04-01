@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
-
-const MONGODB_URI = process.env.MONGODB_URI;
+import { serverConfig } from "@/lib/config";
 
 type MongooseCache = {
   conn: typeof mongoose | null;
@@ -18,7 +17,7 @@ if (!global.mongooseCache) {
 }
 
 export async function connectToDatabase(): Promise<typeof mongoose> {
-  if (!MONGODB_URI) {
+  if (!serverConfig.mongodbUri) {
     throw new Error("Please define MONGODB_URI in your environment variables.");
   }
 
@@ -27,12 +26,18 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
   }
 
   if (!cache.promise) {
-    cache.promise = mongoose.connect(MONGODB_URI, {
-      dbName: process.env.MONGODB_DB_NAME || "dish_suggestion_helper",
+    cache.promise = mongoose.connect(serverConfig.mongodbUri, {
+      dbName: serverConfig.mongodbDbName,
       bufferCommands: false,
     });
   }
 
-  cache.conn = await cache.promise;
-  return cache.conn;
+  try {
+    cache.conn = await cache.promise;
+    return cache.conn;
+  } catch (error) {
+    // Reset promise on failure so future requests can retry cleanly.
+    cache.promise = null;
+    throw error;
+  }
 }

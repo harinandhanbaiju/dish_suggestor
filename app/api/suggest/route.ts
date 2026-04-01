@@ -13,6 +13,23 @@ type RecipeLike = {
   steps: string[];
 };
 
+function sanitizeIngredient(input: string): string {
+  // Keep letters, numbers, spaces and common cooking punctuation only.
+  return input.replace(/[^a-zA-Z0-9\s\-_'()/]/g, "");
+}
+
+function parseIngredients(rawIngredients: unknown): string[] {
+  if (!Array.isArray(rawIngredients)) {
+    return [];
+  }
+
+  const safeIngredients = rawIngredients
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => sanitizeIngredient(item));
+
+  return normalizeIngredientList(safeIngredients);
+}
+
 function buildSuggestions(recipes: RecipeLike[], userIngredients: string[]): RecipeSuggestion[] {
   const userSet = new Set(userIngredients);
 
@@ -40,11 +57,18 @@ function buildSuggestions(recipes: RecipeLike[], userIngredients: string[]): Rec
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as SuggestRequestBody;
-    const userIngredients = normalizeIngredientList(body.ingredients || []);
+    let body: SuggestRequestBody;
+
+    try {
+      body = (await request.json()) as SuggestRequestBody;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
+    }
+
+    const userIngredients = parseIngredients(body.ingredients);
 
     if (userIngredients.length === 0) {
-      return NextResponse.json({ error: "Please provide at least one ingredient." }, { status: 400 });
+      return NextResponse.json({ error: "Please provide at least one valid ingredient." }, { status: 422 });
     }
 
     let recipes: RecipeLike[] = starterRecipes;
@@ -52,7 +76,7 @@ export async function POST(request: Request) {
     try {
       await connectToDatabase();
       await seedRecipesIfEmpty();
-      recipes = await Recipe.find().lean();
+      recipes = await Recipe.find().select("name ingredients steps").lean();
     } catch (databaseError) {
       console.warn("Database unavailable. Using in-memory starter recipes.", databaseError);
     }
